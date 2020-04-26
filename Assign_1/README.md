@@ -1,1 +1,1 @@
-Assignmen 1: Parallelize the SAXPY Loop
+Assignment 1: Parallelize the SAXPY Loop
