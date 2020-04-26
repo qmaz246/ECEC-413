@@ -6,7 +6,7 @@
  * Date created: April 14, 2020
  * Date modified: 
  *
- * Student names: Edward Mazzilli
+ * Student names: Edward Mazzilli, Clayton deGruchy
  * Date: 04/22/2020
  *
  * */
@@ -21,8 +21,9 @@
 /* Function prototypes */
 void compute_gold(float *, float *, float, int);
 void compute_using_pthreads_v1(float *, float *, float, int, int);
-//void compute_using_pthreads_v2(float *, float *, float, int, int);
+void compute_using_pthreads_v2(float *, float *, float, int, int);
 void *compute_silver (void *);
+void *compute_bronze (void *);
 int check_results(float *, float *, int, float);
 
 
@@ -35,6 +36,8 @@ typedef struct args_for_thread
 	float	a;
 	int	start;
 	int	stop;
+	int 	k;
+	int	n;
 
 } ARGS_FOR_THREAD;
 
@@ -93,7 +96,6 @@ int main(int argc, char **argv)
                 + (stop.tv_usec - start.tv_usec)/(float)1000000));
 
     /* Compute SAXPY using pthreads, version 2. Results must be placed in y3 */
-    /*
     fprintf(stderr, "\nCalculating SAXPY using pthreads, version 2\n");
 	gettimeofday(&start, NULL);
 
@@ -102,7 +104,7 @@ int main(int argc, char **argv)
     gettimeofday(&stop, NULL);
 	fprintf(stderr, "Execution time = %fs\n", (float)(stop.tv_sec - start.tv_sec\
                 + (stop.tv_usec - start.tv_usec)/(float)1000000));
-    */
+
     /* Check results for correctness */
     fprintf(stderr, "\nChecking results for correctness\n");
     float eps = 1e-12;                                      /* Do not change this value */
@@ -110,12 +112,12 @@ int main(int argc, char **argv)
         fprintf(stderr, "TEST PASSED\n");
     else 
         fprintf(stderr, "TEST FAILED\n");
-/* 
+ 
     if (check_results(y1, y3, num_elements, eps) == 0)
         fprintf(stderr, "TEST PASSED\n");
     else 
         fprintf(stderr, "TEST FAILED\n");
-*/
+
 	/* Free memory */ 
 	free((void *)x);
 	free((void *)y1);
@@ -142,6 +144,22 @@ compute_silver (void *args)
 	int i;
 	for (i = args_for_me->start; i < args_for_me->stop; i++)
         	args_for_me->y[i] = args_for_me->a * args_for_me->x[i] + args_for_me->y[i]; 
+	pthread_exit((void *) 0);
+}
+
+void *
+compute_bronze (void *args)
+{
+	ARGS_FOR_THREAD *args_for_me = (ARGS_FOR_THREAD *) args;
+
+	int stride = args_for_me->k;
+	int tid = args_for_me->tid;
+	int n = args_for_me->n;
+
+	while (tid < n) {
+		args_for_me->y[tid] = args_for_me->a * args_for_me->x[tid] + args_for_me->y[tid];
+		tid = tid + stride;
+	}
 	pthread_exit((void *) 0);
 }
 
@@ -180,10 +198,30 @@ void compute_using_pthreads_v1(float *x, float *y, float a, int num_elements, in
 }
 
 /* Calculate SAXPY using pthreads, version 2. Place result in the Y vector */
-//void compute_using_pthreads_v2(float *x, float *y, float a, int num_elements, int num_threads)
-//{
-    /* FIXME: Complete this function */
-//}
+void compute_using_pthreads_v2(float *x, float *y, float a, int num_elements, int num_threads)
+{
+        pthread_t       *thread_id;
+        pthread_attr_t  attributes;
+        pthread_attr_init(&attributes);
+
+        thread_id = (pthread_t *) malloc (sizeof(pthread_t) * num_threads);
+        ARGS_FOR_THREAD *args_for_thread = (ARGS_FOR_THREAD *) malloc (sizeof (ARGS_FOR_THREAD) * num_threads);
+
+        for(int i = 0; i < num_threads; i++){
+                args_for_thread[i].tid = i;
+                args_for_thread[i].x = x;
+                args_for_thread[i].y = y;
+                args_for_thread[i].a = a;
+		args_for_thread[i].k = num_threads; 
+                args_for_thread[i].n = num_elements;
+                pthread_create(&thread_id[i], &attributes, compute_bronze, (void *) &args_for_thread[i]);
+
+        }
+
+        for(int i = 0; i < num_threads; i++){
+                pthread_join(thread_id[i], NULL);
+        }
+}
 
 /* Perform element-by-element check of vector if relative error is within specified threshold */
 int check_results(float *A, float *B, int num_elements, float threshold)
