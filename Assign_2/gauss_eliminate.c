@@ -3,8 +3,8 @@
  * Author: Naga Kandasamy
  * Date of last update: April 22, 2020
  *
- * Student names(s): FIXME
- * Date: FIXME
+ * Student names(s): Edward Mazzilli & Clayton DeGruchy
+ * Date: May 06, 2020
  *
  * Compile as follows: 
  * gcc -o gauss_eliminate gauss_eliminate.c compute_gold.c -O3 -Wall -lpthread -lm
@@ -24,8 +24,9 @@
 
 /* Function prototypes */
 extern int compute_gold(float *, int);
+extern void *compute_silver(void *args);
 Matrix allocate_matrix(int, int, int);
-void gauss_eliminate_using_pthreads(Matrix);
+void gauss_eliminate_using_pthreads(Matrix, int);
 int perform_simple_check(const Matrix);
 void print_matrix(const Matrix);
 float get_random_number(int, int);
@@ -42,15 +43,15 @@ int main(int argc, char **argv)
 
     int matrix_size = atoi(argv[1]);
 
-    Matrix A;			                                            /* Input matrix */
-    Matrix U_reference;		                                        /* Upper triangular matrix computed by reference code */
-    Matrix U_mt;			                                        /* Upper triangular matrix computed by pthreads */
+    Matrix A;			      /* Input matrix */
+    Matrix U_reference;		      /* Upper triangular matrix computed by reference code */
+    Matrix U_mt;		      /* Upper triangular matrix computed by pthreads */
 
     fprintf(stderr, "Generating input matrices\n");
-    srand(time (NULL));                                             /* Seed random number generator */
-    A = allocate_matrix(matrix_size, matrix_size, 1);               /* Allocate and populate random square matrix */
-    U_reference = allocate_matrix (matrix_size, matrix_size, 0);    /* Allocate space for reference result */
-    U_mt = allocate_matrix (matrix_size, matrix_size, 0);           /* Allocate space for multi-threaded result */
+    srand(time (NULL));                                     /* Seed random number generator */
+    A = allocate_matrix(matrix_size, matrix_size, 1);       /* Allocate and populate random square matrix */
+    U_reference = allocate_matrix (matrix_size, matrix_size, 0);  /* Allocate space for reference result */
+    U_mt = allocate_matrix (matrix_size, matrix_size, 0);   /* Allocate space for multi-threaded result */
 
     /* Copy contents A matrix into U matrices */
     int i, j;
@@ -83,16 +84,20 @@ int main(int argc, char **argv)
     }
     fprintf(stderr, "Single-threaded Gaussian elimination was successful.\n");
   
-    /* FIXME: Perform Gaussian elimination using pthreads. 
+    /* Perform Gaussian elimination using pthreads at 4, 8, and 16 threads
      * The resulting upper triangular matrix should be returned in U_mt */
-    fprintf(stderr, "\nPerforming gaussian elimination using pthreads\n");
-    gauss_eliminate_using_pthreads(U_mt);
+    for(int k = 4; k<=16; k=k*2){
+ 	fprintf(stderr, "\nPerforming gaussian elimination using %i pthreads\n", k);
+	gettimeofday(&start, NULL);
+	gauss_eliminate_using_pthreads(U_mt, k);
+    	gettimeofday(&stop, NULL);
 
-    /* Check if pthread result matches reference solution within specified tolerance */
-    fprintf(stderr, "\nChecking results\n");
-    int size = matrix_size * matrix_size;
-    int res = check_results(U_reference.elements, U_mt.elements, size, 1e-6);
-    fprintf(stderr, "TEST %s\n", (0 == res) ? "PASSED" : "FAILED");
+	/* Check if pthread result matches reference solution within specified tolerance */
+	fprintf(stderr, "\nChecking results\n");
+   	int size = matrix_size * matrix_size;
+   	int res = check_results(U_reference.elements, U_mt.elements, size, 1e-6);
+    	fprintf(stderr, "TEST %s\n", (0 == res) ? "PASSED" : "FAILED");
+    }
 
     /* Free memory allocated for matrices */
     free(A.elements);
@@ -104,7 +109,7 @@ int main(int argc, char **argv)
 
 
 /* FIXME: Write code to perform gaussian elimination using pthreads */
-void gauss_eliminate_using_pthreads(Matrix U)
+void gauss_eliminate_using_pthreads(Matrix U, int num_threads)
 {
 }
 

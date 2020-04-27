@@ -14,7 +14,8 @@ int compute_gold(float *U, int num_elements)
                 fprintf(stderr, "Numerical instability. The principal diagonal element is zero.\n");
                 return -1;
             }            
-            U[num_elements * k + j] = (float)(U[num_elements * k + j] / U[num_elements * k + k]);	/* Division step */
+	    /* Division step */
+            U[num_elements * k + j] = (float)(U[num_elements * k + j] / U[num_elements * k + k]);	
         }
 
         U[num_elements * k + k] = 1;	/* Set the principal diagonal entry in U to 1 */ 
