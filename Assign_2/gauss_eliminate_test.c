@@ -10,6 +10,9 @@
  * gcc -o gauss_eliminate gauss_eliminate.c compute_gold.c -O3 -Wall -lpthread -lm
  */
 
+#define _GNU_SOURCE
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -22,6 +25,7 @@
 
 #define MIN_NUMBER 2
 #define MAX_NUMBER 50
+
 
 /* Function prototypes */
 extern int compute_gold(float *, int);
@@ -47,15 +51,8 @@ typedef struct args_for_thread
 
 } ARGS_FOR_THREAD;
 
-typedef struct barrier_struct {
-	sem_t counter_sem;
-	sem_t barrier_sem;
-	int counter;
-} BARRIER;
 
-BARRIER barrier;
-
-void barrier_sync (BARRIER *, int, int);
+pthread_barrier_t barrierp;
 
 
 int main(int argc, char **argv)
@@ -68,11 +65,6 @@ int main(int argc, char **argv)
 
     int matrix_size = atoi(argv[1]);
 
-    barrier.counter = 0;
-    sem_init (&barrier.counter_sem, 0, 1); /* Initialize the semaphore protecting the counter to 1 */
-    sem_init (&barrier.barrier_sem, 0, 0); /* Initialize the semaphore protecting the barrier to 0 */
-
-
     Matrix A;			      /* Input matrix */
     Matrix U_reference;		      /* Upper triangular matrix computed by reference code */
     Matrix U_mt;		      /* Upper triangular matrix computed by pthreads */
@@ -82,7 +74,7 @@ int main(int argc, char **argv)
     A = allocate_matrix(matrix_size, matrix_size, 1);       /* Allocate and populate random square matrix */
     U_reference = allocate_matrix (matrix_size, matrix_size, 0);  /* Allocate space for reference result */
     U_mt = allocate_matrix (matrix_size, matrix_size, 0);   /* Allocate space for multi-threaded result */
-    print_matrix(A); 
+    //print_matrix(A); 
     /* Copy contents A matrix into U matrices */
     int i, j;
     for (i = 0; i < A.num_rows; i++) {
@@ -106,7 +98,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Failed to convert given matrix to upper triangular. Try again.\n");
         exit(EXIT_FAILURE);
     }
-    print_matrix(U_reference); 
+    //print_matrix(U_reference); 
     status = perform_simple_check(U_reference);	/* Check that principal diagonal elements are 1 */ 
     if (status < 0) {
         fprintf(stderr, "Upper triangular matrix is incorrect. Exiting.\n");
@@ -116,22 +108,25 @@ int main(int argc, char **argv)
   
     /* Perform Gaussian elimination using pthreads at 4, 8, and 16 threads
      * The resulting upper triangular matrix should be returned in U_mt */
-	/*
+
     for(int k = 4; k<=16; k=k*2){
  	fprintf(stderr, "\nPerforming gaussian elimination using %i pthreads\n", k);
 	gettimeofday(&start, NULL);
 	gauss_eliminate_using_pthreads(U_mt, k);
     	gettimeofday(&stop, NULL);
-	*/
+
 	/* Check if pthread result matches reference solution within specified tolerance */
-	/*
+
 	fprintf(stderr, "\nChecking results\n");
    	int size = matrix_size * matrix_size;
    	int res = check_results(U_reference.elements, U_mt.elements, size, 1e-6);
     	fprintf(stderr, "TEST %s\n", (0 == res) ? "PASSED" : "FAILED");
-    }
-	*/
+	fprintf(stderr, "%d threads run time = %0.2f s\n", k, (float)(stop.tv_sec - start.tv_sec\
+                + (stop.tv_usec - start.tv_usec) / (float)1000000));
 
+    }
+
+/*
 	gettimeofday(&start, NULL);
 	gauss_eliminate_using_pthreads(U_mt, 4);
     	gettimeofday(&stop, NULL);
@@ -140,7 +135,7 @@ int main(int argc, char **argv)
    	int size = matrix_size * matrix_size;
    	int res = check_results(U_reference.elements, U_mt.elements, size, 1e-6);
     	fprintf(stderr, "TEST %s\n", (0 == res) ? "PASSED" : "FAILED");
-
+*/
     /* Free memory allocated for matrices */
     free(A.elements);
     free(U_reference.elements);
@@ -160,6 +155,7 @@ void gauss_eliminate_using_pthreads(Matrix U, int num_threads)
 	thread_id = (pthread_t *) malloc (sizeof(pthread_t) * num_threads);
 	ARGS_FOR_THREAD *args_for_thread = (ARGS_FOR_THREAD *) malloc (sizeof (ARGS_FOR_THREAD) * num_threads);
 
+	pthread_barrier_init(&barrierp, NULL, num_threads);
 	
 	int i, j, k;
 
@@ -175,7 +171,6 @@ void gauss_eliminate_using_pthreads(Matrix U, int num_threads)
 		pthread_join(thread_id[i], NULL);
 	}
 
-	printf("heck\n");
 	for(k = 0; k < U.num_rows; k++){
 		U.elements[U.num_rows * k + k] = 1;
 		for(j = k + 1; j < U.num_rows; j++){
@@ -198,8 +193,6 @@ void *compute_silver(void *args)
     int n_t = args_for_me->num_threads;
 
     for (k = 0; k < num_elements; k++) {	// Rows
-	printf("Thread %d: Heck %d\n", tid, k);
-	fflush(stdout);
 	/* Reduce the current row */
         for (j = k + 1 + tid; j < num_elements; j+=n_t) {   // Columns
             if (U[num_elements * k + k] == 0) {
@@ -208,7 +201,8 @@ void *compute_silver(void *args)
 	    /* Division step */
             U[num_elements * k + j] = (float)(U[num_elements * k + j] / U[num_elements * k + k]);	
 	}
-	barrier_sync(&barrier, tid, n_t);
+
+	pthread_barrier_wait(&barrierp);
 
 	/* Elimination Step */
 	for (i = k + 1 + tid; i < num_elements; i+=n_t){
@@ -217,7 +211,8 @@ void *compute_silver(void *args)
 		}
 	
         }
-	barrier_sync(&barrier, tid, n_t);
+
+	pthread_barrier_wait(&barrierp);
     }
     
     pthread_exit((void *) 0);
@@ -284,28 +279,4 @@ int perform_simple_check(const Matrix M)
             return -1;
   
     return 0;
-}
-
-void
-barrier_sync (BARRIER *barrier, int thread_number, int num_threads)
-{
-    sem_wait (&(barrier->counter_sem)); /* Obtain the lock on the counter */
-
-    /* Check if all threads before us, that is NUM_THREADS-1 threads have reached this point */
-    if (barrier->counter == (num_threads - 1)) {
-        barrier->counter = 0; /* Reset the counter */
-					 
-        sem_post (&(barrier->counter_sem)); 
-					 
-        /* Signal the blocked threads that it is now safe to cross the barrier */			 
-        printf("Thread number %d is signalling other threads to proceed. \n", thread_number); 			 
-	fflush(stdout);
-        for (int i = 0; i < (num_threads - 1); i++)
-            sem_post (&(barrier->barrier_sem));
-    } 
-    else {
-        barrier->counter++; // Increment the counter
-        sem_post (&(barrier->counter_sem)); // Release the lock on the counter
-        sem_wait (&(barrier->barrier_sem)); // Block on the barrier semaphore and wait for someone to signal us when it is safe to cross
-    }
 }
