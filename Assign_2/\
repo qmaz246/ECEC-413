@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 	*/
 
 	gettimeofday(&start, NULL);
-	gauss_eliminate_using_pthreads(U_mt, 4);
+	gauss_eliminate_using_pthreads(U_mt, 1);
     	gettimeofday(&stop, NULL);
 	print_matrix(U_mt);
 	fprintf(stderr, "\nChecking results\n");
@@ -218,6 +218,7 @@ void *compute_silver(void *args)
 	
         }
 	barrier_sync(&barrier, tid, n_t);
+	pthread_barrier_wait(&barrierp);
     }
     
     pthread_exit((void *) 0);
