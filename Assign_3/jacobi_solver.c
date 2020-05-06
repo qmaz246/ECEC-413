@@ -11,12 +11,33 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <sys/time.h>
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
+#include <semaphore.h>
 #include "jacobi_solver.h"
 
+#define TOLERANCE 0.0000001
 /* Uncomment the line below to spit out debug information */ 
-/* #define DEBUG */
+//#define DEBUG
+
+/* Structure to pass arguments into various threads */
+typedef struct args_for_thread
+{
+	int		tid;
+	int		num_threads;
+	int		num_elements;
+	matrix_t 	A;
+	matrix_t 	B;
+	matrix_t 	mt_sol_x;
+	int		rows;
+	int		start;
+	int		stop;
+
+} ARGS_FOR_THREAD;
+
+pthread_barrier_t barrierp;
 
 int main(int argc, char **argv) 
 {
@@ -53,19 +74,51 @@ int main(int argc, char **argv)
 	print_matrix(reference_x);
 #endif
 
+    struct timeval start, stop;	
+
     /* Compute Jacobi solution using reference code */
 	fprintf(stderr, "Generating solution using reference code\n");
     int max_iter = 100000; /* Maximum number of iterations to run */
+    gettimeofday(&start, NULL);
     compute_gold(A, reference_x, B, max_iter);
+    gettimeofday(&stop, NULL);
+
+    fprintf(stderr, "Execution time Gold = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+
     display_jacobi_solution(A, reference_x, B); /* Display statistics */
 	
 	/* Compute the Jacobi solution using pthreads. 
      * Solutions are returned in mt_solution_x.
      * */
     fprintf(stderr, "\nPerforming Jacobi iteration using pthreads\n");
-	compute_using_pthreads(A, mt_solution_x, B);
+    gettimeofday(&start, NULL);
+    compute_using_pthreads(A, mt_solution_x, B, 4, matrix_size);
+    gettimeofday(&stop, NULL); 
+    fprintf(stderr, "Execution time 4 Threads = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));   
     display_jacobi_solution(A, mt_solution_x, B); /* Display statistics */
-    
+    mt_solution_x = allocate_matrix(matrix_size, 1, 0);    
+
+    gettimeofday(&start, NULL);
+    compute_using_pthreads(A, mt_solution_x, B, 8, matrix_size);
+    gettimeofday(&stop, NULL);
+    fprintf(stderr, "Execution time 8 Threads = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+    display_jacobi_solution(A, mt_solution_x, B); /* Display statistics */
+    mt_solution_x = allocate_matrix(matrix_size, 1, 0);
+
+    gettimeofday(&start, NULL);
+    compute_using_pthreads(A, mt_solution_x, B, 16, matrix_size);
+    gettimeofday(&stop, NULL);
+    fprintf(stderr, "Execution time 16 Threads = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+    display_jacobi_solution(A, mt_solution_x, B); /* Display statistics */
+    mt_solution_x = allocate_matrix(matrix_size, 1, 0);
+
+    gettimeofday(&start, NULL);
+    compute_using_pthreads(A, mt_solution_x, B, 32, matrix_size);
+    gettimeofday(&stop, NULL);
+    fprintf(stderr, "Execution time 32 Threads = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+    display_jacobi_solution(A, mt_solution_x, B); /* Display statistics */
+    mt_solution_x = allocate_matrix(matrix_size, 1, 0);
+
     free(A.elements); 
 	free(B.elements); 
 	free(reference_x.elements); 
@@ -76,9 +129,82 @@ int main(int argc, char **argv)
 
 /* FIXME: Complete this function to perform the Jacobi calculation using pthreads. 
  * Result must be placed in mt_sol_x. */
-void compute_using_pthreads (const matrix_t A, matrix_t mt_sol_x, const matrix_t B)
+void compute_using_pthreads (const matrix_t A, matrix_t mt_sol_x, const matrix_t B, int num_threads, int matrix_size)
 {
+	pthread_t	*thread_id;
+	pthread_attr_t	attributes;
+	pthread_attr_init(&attributes);
+
+	thread_id = (pthread_t *) malloc (sizeof(pthread_t) * num_threads);
+	ARGS_FOR_THREAD *args_for_thread = (ARGS_FOR_THREAD *) malloc (sizeof (ARGS_FOR_THREAD) * num_threads);
+
+	pthread_barrier_init(&barrierp, NULL, num_threads);
+	
+	int rows_per_thread = matrix_size / num_threads;
+
+	int i;
+
+	for (i = 0; i < num_threads; i++){
+		args_for_thread[i].tid = i;
+		args_for_thread[i].num_threads = num_threads;
+		args_for_thread[i].num_elements = matrix_size;
+		args_for_thread[i].A = A;
+		args_for_thread[i].B = B;
+		args_for_thread[i].mt_sol_x = mt_sol_x;
+		args_for_thread[i].start = i * rows_per_thread;  
+		args_for_thread[i].stop = (i * rows_per_thread) + rows_per_thread -1;
+		pthread_create(&thread_id[i], &attributes, compute_silver, (void *) &args_for_thread[i]);
+	}
+
+	for(i = 0; i < num_threads; i++){
+		pthread_join(thread_id[i], NULL);
+	}
+	
 }
+
+// Perform Jacobi in place on U matrix
+void *compute_silver(void *args)
+{
+    int i, j;
+
+    float sum, ssd;
+
+    ARGS_FOR_THREAD *args_for_me = (ARGS_FOR_THREAD *) args;
+    int num_elements = args_for_me->num_elements;
+    matrix_t A = args_for_me->A;
+    matrix_t B = args_for_me->B;
+    matrix_t mt_sol_x = args_for_me->mt_sol_x;
+    int start = args_for_me->start;
+    int stop = args_for_me->stop;
+
+    matrix_t new_x = allocate_matrix(num_elements, 1, 0);
+
+    int done = 0;
+    while (done != 1)
+    {
+    for(i = start; i < stop; i++){
+        sum = 0;
+        for (j = 0; j < num_elements; j++){
+            if (i != j){
+                sum = sum + A.elements[i*num_elements+j] * mt_sol_x.elements[j];
+                }
+            } 
+        new_x.elements[i] = (B.elements[i] - sum)/A.elements[i*num_elements+i];
+        }
+     
+     ssd = 0;
+     for (i = start; i < stop; i++){
+         ssd = ssd + pow((mt_sol_x.elements[i] - new_x.elements[i]), 2);
+         mt_sol_x.elements[i] = new_x.elements[i];
+         }
+     if (sqrt(ssd) < TOLERANCE){
+         done = 1;
+         }
+     }
+     return 0;	
+}
+
+
 
 /* Allocate a matrix of dimensions height * width.
    If init == 0, initialize to all zeroes.  
