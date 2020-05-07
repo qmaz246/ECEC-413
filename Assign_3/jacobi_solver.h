@@ -18,7 +18,7 @@ extern void compute_gold(const matrix_t, matrix_t, const matrix_t, int);
 extern void display_jacobi_solution(const matrix_t, const matrix_t, const matrix_t);
 int check_if_diagonal_dominant(const matrix_t);
 matrix_t create_diagonally_dominant_matrix(int, int);
-void compute_using_pthreads(const matrix_t, matrix_t, const matrix_t, int num_threads, int matris_size, int max_iter);
+void compute_using_pthreads(const matrix_t, matrix_t, const matrix_t, int num_threads, int matris_size, int max_iter, matrix_t new_x);
 void *compute_silver(void *args);
 void print_matrix(const matrix_t);
 float get_random_number(int, int);

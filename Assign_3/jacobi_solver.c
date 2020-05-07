@@ -52,6 +52,9 @@ int main(int argc, char **argv)
 	matrix_t  B;                    /* N x 1 b matrix */
 	matrix_t reference_x;           /* Reference solution */ 
     matrix_t mt_solution_x;         /* Solution computed by pthread code */
+    matrix_t new_x;
+
+
 
 	/* Generate diagonally dominant matrix */
     fprintf(stderr, "\nCreating input matrices\n");
@@ -64,6 +67,7 @@ int main(int argc, char **argv)
 	
     /* Create other matrices */
     B = allocate_matrix(matrix_size, 1, 1);
+        new_x = allocate_matrix(matrix_size, 1, 0);
 	reference_x = allocate_matrix(matrix_size, 1, 0);
 	mt_solution_x = allocate_matrix(matrix_size, 1, 0);
 
@@ -89,32 +93,28 @@ int main(int argc, char **argv)
      * */
     fprintf(stderr, "\nPerforming Jacobi iteration using pthreads\n\n");
     gettimeofday(&start, NULL);
-    compute_using_pthreads(A, mt_solution_x, B, 4, matrix_size, max_iter);
+    compute_using_pthreads(A, mt_solution_x, B, 4, matrix_size, max_iter, new_x);
     gettimeofday(&stop, NULL); 
     fprintf(stderr, "Execution time 4 Threads = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));   
     display_jacobi_solution(A, mt_solution_x, B); /* Display statistics */
-    mt_solution_x = allocate_matrix(matrix_size, 1, 0);    
 
     gettimeofday(&start, NULL);
-    compute_using_pthreads(A, mt_solution_x, B, 8, matrix_size, max_iter);
+    compute_using_pthreads(A, mt_solution_x, B, 8, matrix_size, max_iter, new_x);
     gettimeofday(&stop, NULL);
     fprintf(stderr, "Execution time 8 Threads = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
     display_jacobi_solution(A, mt_solution_x, B); /* Display statistics */
-    mt_solution_x = allocate_matrix(matrix_size, 1, 0);
 
     gettimeofday(&start, NULL);
-    compute_using_pthreads(A, mt_solution_x, B, 16, matrix_size, max_iter);
+    compute_using_pthreads(A, mt_solution_x, B, 16, matrix_size, max_iter, new_x);
     gettimeofday(&stop, NULL);
     fprintf(stderr, "Execution time 16 Threads = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
     display_jacobi_solution(A, mt_solution_x, B); /* Display statistics */
-    mt_solution_x = allocate_matrix(matrix_size, 1, 0);
 
     gettimeofday(&start, NULL);
-    compute_using_pthreads(A, mt_solution_x, B, 32, matrix_size, max_iter);
+    compute_using_pthreads(A, mt_solution_x, B, 32, matrix_size, max_iter, new_x);
     gettimeofday(&stop, NULL);
     fprintf(stderr, "Execution time 32 Threads = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
     display_jacobi_solution(A, mt_solution_x, B); /* Display statistics */
-    mt_solution_x = allocate_matrix(matrix_size, 1, 0);
 
     free(A.elements); 
 	free(B.elements); 
@@ -126,42 +126,39 @@ int main(int argc, char **argv)
 
 /* FIXME: Complete this function to perform the Jacobi calculation using pthreads. 
  * Result must be placed in mt_sol_x. */
-void compute_using_pthreads (const matrix_t A, matrix_t mt_sol_x, const matrix_t B, int num_threads, int matrix_size, int max_iter)
+void compute_using_pthreads (const matrix_t A, matrix_t mt_sol_x, const matrix_t B, int num_threads, int matrix_size, int max_iter, matrix_t new_x)
 {
 	pthread_t	*thread_id;
 	pthread_attr_t	attributes;
 	pthread_attr_init(&attributes);
 
 	thread_id = (pthread_t *) malloc (sizeof(pthread_t) * num_threads);
-	ARGS_FOR_THREAD *args_for_thread = (ARGS_FOR_THREAD *) malloc (sizeof (ARGS_FOR_THREAD) * num_threads);
+	ARGS_FOR_THREAD **args_for_thread = malloc (sizeof (ARGS_FOR_THREAD) * num_threads);
 
 	pthread_barrier_t *barrier = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t *));
 	pthread_barrier_init(barrier,NULL,num_threads);
 
-        /* Allocate n x 1 matrix to hold iteration values.*/
-        matrix_t new_x = allocate_matrix(matrix_size, 1, 0);
-
         int i;
 
         /* Initialize current jacobi solution. */
-        for (i = 0; i <= matrix_size; i++)
+        for (i = 0; i < matrix_size; i++)
             mt_sol_x.elements[i] = B.elements[i];
 
 	int rows_per_thread = matrix_size / num_threads;
-
 	for (i = 0; i < num_threads; i++){
-		args_for_thread[i].tid = i;
-		args_for_thread[i].num_threads = num_threads;
-		args_for_thread[i].num_elements = matrix_size;
-		args_for_thread[i].A = A;
-		args_for_thread[i].B = B;
-		args_for_thread[i].mt_sol_x = mt_sol_x;
-		args_for_thread[i].start = i * rows_per_thread;  
-		args_for_thread[i].stop = (i * rows_per_thread) + rows_per_thread -1;
-		args_for_thread[i].max_iter = max_iter;
-		args_for_thread[i].new_x = new_x;
-                args_for_thread[i].barrier = barrier;
-		pthread_create(&thread_id[i], &attributes, compute_silver, (void *) &args_for_thread[i]);
+		args_for_thread[i] = (ARGS_FOR_THREAD *) malloc (sizeof (ARGS_FOR_THREAD));
+		args_for_thread[i]->tid = i;
+		args_for_thread[i]->num_threads = num_threads;
+		args_for_thread[i]->num_elements = matrix_size;
+		args_for_thread[i]->A = A;
+		args_for_thread[i]->B = B;
+		args_for_thread[i]->mt_sol_x = mt_sol_x;
+		args_for_thread[i]->start = i * rows_per_thread;  
+		args_for_thread[i]->stop = (i * rows_per_thread) + rows_per_thread -1;
+		args_for_thread[i]->max_iter = max_iter;
+		args_for_thread[i]->new_x = new_x;
+                args_for_thread[i]->barrier = barrier;
+		pthread_create(&thread_id[i], &attributes, compute_silver, (void *) args_for_thread[i]);
 	}
 
 	for(i = 0; i < num_threads; i++){
@@ -182,7 +179,8 @@ void *compute_silver(void *args)
     matrix_t new_x = args_for_me->new_x;
     int start = args_for_me->start;
     int stop = args_for_me->stop;
-    int max_iter = args_for_me->max_iter;
+    //int max_iter = args_for_me->max_iter;
+    int num_threads = args_for_me->num_threads;
     pthread_barrier_t *barrier = args_for_me->barrier;
 
     int i, j;
@@ -193,7 +191,7 @@ void *compute_silver(void *args)
     int num_iter = 0;
 
     while (!done) {
-        for (i = start; i <= stop; i++) {
+        for (i = start; i <= stop; i++)  {
             double sum = 0.0;
             for (j = 0; j < num_elements; j++) {
                 if (i != j)
@@ -204,15 +202,15 @@ void *compute_silver(void *args)
             new_x.elements[i] = (B.elements[i] - sum)/A.elements[i * num_elements + i];
         }
 
-        pthread_barrier_wait(barrier);
+	pthread_barrier_wait(barrier);
 
         /* Check for convergence and update the unknowns. */
         ssd = 0.0; 
         for (i = 0; i < num_elements; i++) {
-            ssd += (new_x.elements[i] - mt_sol_x.elements[i]) * (new_x.elements[i] - mt_sol_x.elements[i]);
+            ssd += (mt_sol_x.elements[i] - new_x.elements[i]) * (mt_sol_x.elements[i] - new_x.elements[i]);
         }
 
-        pthread_barrier_wait(barrier);
+	pthread_barrier_wait(barrier);
 
 	for (i = start; i <= stop; i++) {
             mt_sol_x.elements[i] = new_x.elements[i];
@@ -221,13 +219,17 @@ void *compute_silver(void *args)
 	num_iter++;
         mse = sqrt(ssd); /* Mean squared error. */
 
-	if ((mse <= THRESHOLD) || (num_iter == max_iter))
+	if (mse <= THRESHOLD)
             done = 1;
+
+	pthread_barrier_wait(barrier);
+
     }
 
     if (tid == 0){
     	printf("Num Iter: %d\n", num_iter);
     	printf("MSE: %f\n", mse);
+	printf("Threshold: %f\n", THRESHOLD);
     }
 
     pthread_exit((void *) 0);
