@@ -24,7 +24,7 @@
 /* Function prototypes */
 extern int compute_gold(float *, int);
 Matrix allocate_matrix(int, int, int);
-void gauss_eliminate_using_omp(Matrix);
+void gauss_eliminate_using_omp(Matrix, int);
 int perform_simple_check(const Matrix);
 void print_matrix(const Matrix);
 float get_random_number(int, int);
@@ -85,7 +85,7 @@ int main(int argc, char **argv)
     /* FIXME: Perform Gaussian elimination using OpenMP. 
      * The resulting upper triangular matrix should be returned in U_mt */
     fprintf(stderr, "\nPerforming gaussian elimination using omp\n");
-    gauss_eliminate_using_omp(U_mt);
+    gauss_eliminate_using_omp(U_mt, 4);
 
     /* Check if pthread result matches reference solution within specified tolerance */
     fprintf(stderr, "\nChecking results\n");
@@ -103,7 +103,7 @@ int main(int argc, char **argv)
 
 
 /* FIXME: Write code to perform gaussian elimination using omp */
-void gauss_eliminate_using_omp(Matrix U)
+void gauss_eliminate_using_omp(Matrix U, int num_threads)
 {
 }
 
