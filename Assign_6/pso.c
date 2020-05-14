@@ -12,11 +12,13 @@
  * Date created: April 30, 2020
  * Date modified: May 4, 2020 
  *
- * Student/team: FIXME
- * Date: FIXME
+ * Student/team: Clayton deGruchy, Edward Mazzilli
+ * Date: 5/15
  */  
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <sys/time.h>
 #include "pso.h"
 
 int main(int argc, char **argv)
@@ -40,9 +42,15 @@ int main(int argc, char **argv)
     int max_iter = atoi(argv[6]);
     int num_threads = atoi(argv[7]);
 
+    struct timeval start, stop;
+
     /* Optimize using reference version */
     int status;
+    gettimeofday(&start, NULL);
     status = optimize_gold(function, dim, swarm_size, xmin, xmax, max_iter);
+    gettimeofday(&stop, NULL);
+    fprintf(stderr, "Execution time Gold = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+
     if (status < 0) {
         fprintf(stderr, "Error optimizing function using reference code\n");
         exit (EXIT_FAILURE);
@@ -52,7 +60,12 @@ int main(int argc, char **argv)
      * Return -1 on error, 0 on success. Print best-performing 
      * particle within the function prior to returning. 
      */
+    gettimeofday(&start, NULL);
     status = optimize_using_omp(function, dim, swarm_size, xmin, xmax, max_iter, num_threads);
+    gettimeofday(&stop, NULL);
+    fprintf(stderr, "Execution time OMP = %fs\n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+
+
     if (status < 0) {
         fprintf(stderr, "Error optimizing function using OpenMP\n");
         exit (EXIT_FAILURE);
