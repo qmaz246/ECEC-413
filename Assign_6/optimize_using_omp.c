@@ -27,6 +27,10 @@ int pso_solve_omp(char *function, swarm_t *swarm,
     c2 = 1.49;
     iter = 0;
     g = -1;
+
+    omp_set_num_threads(num_threads);
+
+
     while (iter < max_iter) {
         for (i = 0; i < swarm->num_particles; i++) {
             particle = &swarm->particle[i];

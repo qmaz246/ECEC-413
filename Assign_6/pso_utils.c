@@ -155,6 +155,10 @@ int pso_get_best_fitness_omp(swarm_t *swarm, int num_threads)
 
     g = -1;
 
+    omp_set_num_threads(num_threads);
+
+//--------------------------------------------------------------------------------------------
+    #pragma omp parallel for default(none) shared(swarm, best_fitness, g) private(i, particle)
     for (i = 0; i < swarm->num_particles; i++) {
         particle = &swarm->particle[i];
         if (particle->fitness < best_fitness) {
@@ -162,6 +166,7 @@ int pso_get_best_fitness_omp(swarm_t *swarm, int num_threads)
             g = i;
         }
     }
+//--------------------------------------------------------------------------------------------
     return g;
 }
 
@@ -292,6 +297,10 @@ swarm_t *pso_init_omp(char *function, int dim, int swarm_size,
     if (swarm->particle == NULL)
         return NULL;
 
+    omp_set_num_threads(num_threads);
+
+//-----------------------------------------------------------------------------------------------------------------------
+    #pragma omp parallel for default(none) shared(swarm, dim, xmin, xmax, function, fitness) private(i, j, particle, status)
     for (i = 0; i < swarm->num_particles; i++) {
         particle = &swarm->particle[i];
         particle->dim = dim;
@@ -313,21 +322,25 @@ swarm_t *pso_init_omp(char *function, int dim, int swarm_size,
         /* Initialize particle fitness */
         status = pso_eval_fitness(function, particle, &fitness);
         if (status < 0) {
-            fprintf(stderr, "Could not evaluate fitness. Unknown function provided.\n");
-            return NULL;
+            printf("Could not evaluate fitness. Unknown function provided.\n");
         }
         particle->fitness = fitness;
 
         /* Initialize index of best performing particle */
         particle->g = -1;
     }
+//-----------------------------------------------------------------------------------------------------------------------
 
     /* Get index of particle with best fitness */
     g = pso_get_best_fitness(swarm);
+
+//---------------------------------------------------------------------------
+    #pragma omp parallel for default(none) shared(g, swarm) private(particle)
     for (i = 0; i < swarm->num_particles; i++) {
         particle = &swarm->particle[i];
         particle->g = g;
     }
+//---------------------------------------------------------------------------
 
     return swarm;
 }
