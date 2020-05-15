@@ -49,7 +49,7 @@ int pso_solve_omp(char *function, swarm_t *swarm,
                                  + c2 * r2 * (gbest->x[j] - particle->x[j]);
                 /* Clamp velocity */
                 if ((particle->v[j] < -fabsf(xmax - xmin)) || (particle->v[j] > fabsf(xmax - xmin))) 
-                    particle->v[j] = uniform(-fabsf(xmax - xmin), fabsf(xmax - xmin));
+                    particle->v[j] = uniform_omp(-fabsf(xmax - xmin), fabsf(xmax - xmin), seed);
 
                 /* Update particle position */
                 particle->x[j] = particle->x[j] + particle->v[j];

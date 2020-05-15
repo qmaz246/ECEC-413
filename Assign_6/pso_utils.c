@@ -13,7 +13,14 @@
 float uniform(float min, float max)
 {
     float normalized; 
-    unsigned int seed = 10;
+    normalized = (float)rand()/(float)RAND_MAX;
+    return (min + normalized * (max - min));
+}
+
+/* Return a random number uniformly distributed between [min, max] */
+float uniform_omp(float min, float max, unsigned int seed)
+{
+    float normalized;
     normalized = (float)rand_r(&seed)/(float)RAND_MAX;
     return (min + normalized * (max - min));
 }
@@ -153,21 +160,26 @@ int pso_get_best_fitness_omp(swarm_t *swarm, int num_threads)
 {
     int i, g;
     int *g_array;
+    float *best_fit_array;
     float best_fitness;
-    best_fitness = INFINITY;
     particle_t *particle;
 
     g = -1;
     g_array = (int *)malloc(num_threads * sizeof(int));
-    
+    best_fit_array = (float *)malloc(num_threads * sizeof(float));
+
+    for (i = 0; i < num_threads; i++){
+        best_fit_array[i] = INFINITY;
+    }
+
     omp_set_num_threads(num_threads);
 
 //--------------------------------------------------------------------------------------------
-    #pragma omp parallel for default(none) shared(swarm, g_array) private(i, particle, best_fitness)
+    #pragma omp parallel for default(none) shared(swarm, g_array, best_fit_array) private(i, particle)
     for (i = 0; i < swarm->num_particles; i++) {
         particle = &swarm->particle[i];
-        if (particle->fitness < best_fitness) {
-            best_fitness = particle->fitness;
+        if (particle->fitness < best_fit_array[omp_get_thread_num()]) {
+            best_fit_array[omp_get_thread_num()] = particle->fitness;
             g_array[omp_get_thread_num()] = i;
         }
     }
@@ -181,6 +193,10 @@ int pso_get_best_fitness_omp(swarm_t *swarm, int num_threads)
 		g = i;
 	}
     }
+
+    free(g_array);
+    free(best_fit_array);
+
     return g;
 }
 
