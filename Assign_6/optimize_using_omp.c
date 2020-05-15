@@ -32,12 +32,11 @@ int pso_solve_omp(char *function, swarm_t *swarm,
 
 
     while (iter < max_iter) {
-        for (i = 0; i < swarm->num_particles; i++) {
+        #pragma omp parallel for default(none) shared(w, c1, c2, xmax, xmin, swarm, function) private(i, j, r1, r2, particle, gbest, curr_fitness)
+	for (i = 0; i < swarm->num_particles; i++) {
             particle = &swarm->particle[i];
             gbest = &swarm->particle[particle->g];  /* Best performing particle from last iteration */ 
 
-//---------------------------------------------------------
-            #pragma omp parallel for default(none) shared(i, particle, w, c1, c2, gbest, xmax, xmin) private(j, r1, r2)
             for (j = 0; j < particle->dim; j++) {   /* Update this particle's state */
                 r1 = (float)rand()/(float)RAND_MAX;
                 r2 = (float)rand()/(float)RAND_MAX;
@@ -56,8 +55,6 @@ int pso_solve_omp(char *function, swarm_t *swarm,
                 if (particle->x[j] < xmin)
                     particle->x[j] = xmin;
             } /* State update */
-//-----------------------------------------------------------
-
             
             /* Evaluate current fitness */
             pso_eval_fitness(function, particle, &curr_fitness);
