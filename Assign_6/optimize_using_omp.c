@@ -4,8 +4,9 @@
  * Date: May 2, 2020
  *
  */
-#include <stdio.h>
-#include <stdlib.h>
+#define _GNU_SOURCE
+#include "stdio.h"
+#include "stdlib.h"
 #include <time.h>
 #include <math.h>
 #include <string.h>
@@ -29,17 +30,19 @@ int pso_solve_omp(char *function, swarm_t *swarm,
     g = -1;
 
     omp_set_num_threads(num_threads);
-
+    unsigned int seed;
 
     while (iter < max_iter) {
-        #pragma omp parallel for default(none) shared(w, c1, c2, xmax, xmin, swarm, function) private(i, j, r1, r2, particle, gbest, curr_fitness)
+        #pragma omp parallel for default(none) shared(w, c1, c2, xmax, xmin, swarm, function) private(i, j, r1, r2, particle, gbest, curr_fitness, seed)
 	for (i = 0; i < swarm->num_particles; i++) {
             particle = &swarm->particle[i];
             gbest = &swarm->particle[particle->g];  /* Best performing particle from last iteration */ 
 
+            seed = 42 + omp_get_thread_num();
+
             for (j = 0; j < particle->dim; j++) {   /* Update this particle's state */
-                r1 = (float)rand()/(float)RAND_MAX;
-                r2 = (float)rand()/(float)RAND_MAX;
+		r1 = (float)rand_r(&seed)/(float)RAND_MAX;
+                r2 = (float)rand_r(&seed)/(float)RAND_MAX;
                 /* Update particle velocity */
                 particle->v[j] = w * particle->v[j]\
                                  + c1 * r1 * (particle->pbest[j] - particle->x[j])\

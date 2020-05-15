@@ -1,5 +1,6 @@
 /* Utility functions for PSO */
 #define _XOPEN_SOURCE 500 /* For definition of PI */
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -12,7 +13,8 @@
 float uniform(float min, float max)
 {
     float normalized; 
-    normalized = (float)rand()/(float)RAND_MAX;
+    unsigned int seed = 10;
+    normalized = (float)rand_r(&seed)/(float)RAND_MAX;
     return (min + normalized * (max - min));
 }
 
@@ -158,7 +160,7 @@ int pso_get_best_fitness_omp(swarm_t *swarm, int num_threads)
     omp_set_num_threads(num_threads);
 
 //--------------------------------------------------------------------------------------------
-    #pragma omp parallel for default(none) shared(swarm, best_fitness, g) private(i, particle)
+    //#pragma omp parallel for default(none) shared(swarm, best_fitness, g) private(i, particle)
     for (i = 0; i < swarm->num_particles; i++) {
         particle = &swarm->particle[i];
         if (particle->fitness < best_fitness) {
