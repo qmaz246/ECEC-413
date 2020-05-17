@@ -17,15 +17,21 @@
 #include <math.h>
 #include <sys/time.h>
 
-/* #define DEBUG */
+#define DEBUG 
 
 /* Include the kernel code */
 #include "blur_filter_kernel.cu"
+
+#define THREAD_BLOCK_SIZE 128
+#define NUM_THREAD_BLOCKS 240
+ 
 
 extern "C" void compute_gold(const image_t, image_t);
 void compute_on_device(const image_t, image_t);
 int check_results(const float *, const float *, int, float);
 void print_image(const image_t);
+void check_for_error(char const *);
+
 
 int main(int argc, char **argv)
 {
@@ -59,14 +65,16 @@ int main(int argc, char **argv)
     fprintf(stderr, "Calculating blur on the CPU\n"); 
     compute_gold(in, out_gold); 
 
-#ifdef DEBUG 
-   print_image(in);
-   print_image(out_gold);
-#endif
 
    /* FIXME: Calculate the blur on the GPU. The result is stored in out_gpu. */
    fprintf(stderr, "Calculating blur on the GPU\n");
    compute_on_device(in, out_gpu);
+
+#ifdef DEBUG 
+   print_image(in);
+   print_image(out_gold);
+   print_image(out_gpu);
+#endif
 
    /* Check CPU and GPU results for correctness */
    fprintf(stderr, "Checking CPU and GPU results\n");
@@ -90,6 +98,38 @@ int main(int argc, char **argv)
 /* FIXME: Complete this function to calculate the blur on the GPU */
 void compute_on_device(const image_t in, image_t out)
 {
+    float *input_device = NULL;
+    float *output_device = NULL;
+	
+    int size = in.size;
+    int size_sq = size * size;
+
+    /* Allocate space on GPU for input image, and copy contents of vectors to GPU */
+    cudaMalloc((void **)&input_device, size_sq * sizeof(float));
+    cudaMemcpy(input_device, in.element, size_sq * sizeof(float), cudaMemcpyHostToDevice);
+	
+    
+    /* Allocate space for output image  on GPU */
+    cudaMalloc((void **)&output_device, size_sq * sizeof(float));
+  
+    /* Set up the execution grid on the GPU. */
+    int num_thread_blocks = NUM_THREAD_BLOCKS;
+    dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);	/* Set number of threads in the thread block */
+    fprintf(stderr, "Setting up a (%d x 1) execution grid\n", num_thread_blocks);
+    dim3 grid(num_thread_blocks, 1);
+	
+    /* Launch kernel with multiple thread blocks. The kernel call is non-blocking. */
+    blur_filter_kernel<<< grid, thread_block >>>(input_device, output_device, size);	 
+    cudaDeviceSynchronize(); /* Force CPU to wait for GPU to complete */
+    check_for_error("KERNEL FAILURE");
+  
+    /* Copy result vector back from GPU and store */
+    cudaMemcpy(out.element, output_device, size_sq * sizeof(float), cudaMemcpyDeviceToHost);
+  
+	/* Free memory on GPU */	  
+    cudaFree(input_device); 
+    cudaFree(output_device); 
+
     return;
 }
 
@@ -118,4 +158,14 @@ void print_image(const image_t img)
     }
 
     printf("\n");
+}
+
+/* Check for errors when executing the kernel */
+void check_for_error(char const *msg)                
+{
+    cudaError_t err = cudaGetLastError();
+    if (cudaSuccess != err) {
+        fprintf(stderr, "CUDA ERROR: %s (%s). \n", msg, cudaGetErrorString(err));
+        exit(EXIT_FAILURE);
+    }
 }
