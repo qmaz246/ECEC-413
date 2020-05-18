@@ -15,9 +15,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include <sys/time.h>
 
-#define DEBUG 
+// #define DEBUG 
 
 /* Include the kernel code */
 #include "blur_filter_kernel.cu"
@@ -44,7 +45,7 @@ int main(int argc, char **argv)
     /* Allocate memory for the input and output images */
     int size = atoi(argv[1]);
 
-    fprintf(stderr, "Creating %d x %d images\n", size, size);
+    fprintf(stderr, "Creating a %d x %d image\n", size, size);
     image_t in, out_gold, out_gpu;
     in.size = out_gold.size = out_gpu.size = size;
     in.element = (float *)malloc(sizeof(float) * size * size);
@@ -60,15 +61,29 @@ int main(int argc, char **argv)
     int i;
     for (i = 0; i < size * size; i++)
         in.element[i] = rand()/(float)RAND_MAX -  0.5;
-  
+  	
+    struct timeval start, stop;
+
    /* Calculate the blur on the CPU. The result is stored in out_gold. */
     fprintf(stderr, "Calculating blur on the CPU\n"); 
+    gettimeofday(&start, NULL);
     compute_gold(in, out_gold); 
+    gettimeofday(&stop, NULL);
+    
+    fprintf(stderr, "CPU run time = %0.4f s\n", (float)(stop.tv_sec - start.tv_sec\
+                + (stop.tv_usec - start.tv_usec) / (float)1000000));
 
+    
 
    /* FIXME: Calculate the blur on the GPU. The result is stored in out_gpu. */
    fprintf(stderr, "Calculating blur on the GPU\n");
+   gettimeofday(&start, NULL);
    compute_on_device(in, out_gpu);
+   gettimeofday(&stop, NULL);
+
+   fprintf(stderr, "GPU run time = %0.4f s\n", (float)(stop.tv_sec - start.tv_sec\
+                + (stop.tv_usec - start.tv_usec) / (float)1000000));
+
 
 #ifdef DEBUG 
    print_image(in);
@@ -95,7 +110,7 @@ int main(int argc, char **argv)
     exit(EXIT_SUCCESS);
 }
 
-/* FIXME: Complete this function to calculate the blur on the GPU */
+/* Calculate the blur on the GPU */
 void compute_on_device(const image_t in, image_t out)
 {
     float *input_device = NULL;
@@ -104,12 +119,12 @@ void compute_on_device(const image_t in, image_t out)
     int size = in.size;
     int size_sq = size * size;
 
-    /* Allocate space on GPU for input image, and copy contents of vectors to GPU */
+    /* Allocate space on GPU for the input image, and copy to GPU */
     cudaMalloc((void **)&input_device, size_sq * sizeof(float));
     cudaMemcpy(input_device, in.element, size_sq * sizeof(float), cudaMemcpyHostToDevice);
 	
     
-    /* Allocate space for output image  on GPU */
+    /* Allocate space on GPU for the output image */
     cudaMalloc((void **)&output_device, size_sq * sizeof(float));
   
     /* Set up the execution grid on the GPU. */
@@ -123,10 +138,10 @@ void compute_on_device(const image_t in, image_t out)
     cudaDeviceSynchronize(); /* Force CPU to wait for GPU to complete */
     check_for_error("KERNEL FAILURE");
   
-    /* Copy result vector back from GPU and store */
+    /* Copy result from GPU and store into output image */
     cudaMemcpy(out.element, output_device, size_sq * sizeof(float), cudaMemcpyDeviceToHost);
   
-	/* Free memory on GPU */	  
+    /* Free memory on GPU */	  
     cudaFree(input_device); 
     cudaFree(output_device); 
 

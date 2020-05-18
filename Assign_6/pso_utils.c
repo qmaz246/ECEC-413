@@ -190,7 +190,7 @@ int pso_get_best_fitness_omp(swarm_t *swarm, int num_threads)
 	particle = &swarm->particle[g_array[i]];
 	if (particle->fitness < best_fitness) {
 		best_fitness = particle->fitness;
-		g = i;
+		g = g_array[i];
 	}
     }
 
