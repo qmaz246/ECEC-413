@@ -21,6 +21,9 @@
 /* Uncomment the line below if you want the code to spit out debug information. */ 
 /* #define DEBUG */
 
+#define THREAD_BLOCK_SIZE 128
+#define NUM_THREAD_BLOCKS 240
+
 int main(int argc, char **argv) 
 {
 	if (argc > 1) {
@@ -81,8 +84,56 @@ int main(int argc, char **argv)
 
 /* FIXME: Complete this function to perform Jacobi calculation on device */
 void compute_on_device(const matrix_t A, matrix_t gpu_naive_sol_x, 
-                       matrix_t gpu_opt_sol_x, const matrix_t B)
+                       matrix_t gpu_opt_sol_x, const matrix_t B, int num_elements)
 {
+    matrix_t *A_in = NULL;
+    matrix_t *B_in = NULL;
+    matrix_t *X_in = NULL;
+    matrix_t *X_out = NULL;
+
+    float *ssd_device = NULL;
+    float ssd_host;
+
+    int done = 0    
+
+    matrix_t A_in = allocate_matrix_on_device(A);
+    copy_matrix_to_device(A_in, A);
+	
+    matrix_t B_in = allocate_matrix_on_device(B);
+    copy_matrix_to_device(B_in, B);
+
+    matrix_t X_in = allocate_matrix_on_device(gpu_naive_sol_x);
+    matrix_t X_out = allocate_matrix_on_device(gpu_naive_sol_x);
+
+    cudaMalloc((void **)&ssd, num_elements * sizeof(matrix_t));
+
+    while (! done){
+        cudaMemset(&ssd, 0, sizeof(float));
+
+        /* Set up the execution grid on the GPU. */
+        int num_thread_blocks = NUM_THREAD_BLOCKS;
+        dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);	/* Set number of threads in the thread block */
+        fprintf(stderr, "Setting up a (%d x 1) execution grid\n", num_thread_blocks);
+        dim3 grid(num_thread_blocks, 1);
+
+        /* Launch kernel with multiple thread blocks. The kernel call is non-blocking. */
+        jacobi_solver_kernel<<< grid, thread_block >>>(A_in, B_in, X_in, X_out);
+	 
+        cudaDeviceSynchronize(); /* Force CPU to wait for GPU to complete */
+
+        cudaMemcpy(ssd_device, ssd_host, sizeof(float), cudaMemcpyDeviceToHost);
+
+        if (ssd < THRESHOLD):
+            done = 1;
+        else: {
+            int X_temp = *X_out;
+            *X_out = *X_in;
+            *X_in = X_temp;
+            }
+    }
+
+    cudaMemcpy(X_out, gpu_opt_sol_x, sizeof(matrix_t), cudaMemcpyDeviceToHost)
+
     return;
 }
 
