@@ -21,8 +21,8 @@
 /* Uncomment the line below if you want the code to spit out debug information. */ 
 /* #define DEBUG */
 
-#define THREAD_BLOCK_SIZE 128
-#define NUM_THREAD_BLOCKS 240
+//#define THREAD_BLOCK_SIZE 128
+//#define NUM_THREAD_BLOCKS 240
 
 int main(int argc, char **argv) 
 {
@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 	srand(time(NULL));
 
 	/* Generate diagonally dominant matrix */ 
-    printf("\nGenerating %d x %d system\n", MATRIX_SIZE, MATRIX_SIZE);
+    //printf("\nGenerating %d x %d system\n", MATRIX_SIZE, MATRIX_SIZE);
 	A = create_diagonally_dominant_matrix(MATRIX_SIZE, MATRIX_SIZE);
 	if (A.elements == NULL) {
         printf("Error creating matrix\n");
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 	/* Compute Jacobi solution on device. Solutions are returned 
        in gpu_naive_solution_x and gpu_opt_solution_x. */
     printf("\nPerforming Jacobi iteration on device\n");
-	compute_on_device(A, gpu_naive_solution_x, gpu_opt_solution_x, B);
+	compute_on_device(A, gpu_naive_solution_x, gpu_opt_solution_x, B, MATRIX_SIZE);
     display_jacobi_solution(A, gpu_naive_solution_x, B); /* Display statistics */
     display_jacobi_solution(A, gpu_opt_solution_x, B); 
     
@@ -86,15 +86,12 @@ int main(int argc, char **argv)
 void compute_on_device(const matrix_t A, matrix_t gpu_naive_sol_x, 
                        matrix_t gpu_opt_sol_x, const matrix_t B, int num_elements)
 {
-    matrix_t *A_in = NULL;
-    matrix_t *B_in = NULL;
-    matrix_t *X_in = NULL;
-    matrix_t *X_out = NULL;
+    int *num_elements_in = NULL;
+    double *ssd_device = NULL;
+    double *ssd_host = NULL;
 
-    float *ssd_device = NULL;
-    float ssd_host;
-
-    int done = 0    
+    int done = 0; 
+    int num_iter = 0;
 
     matrix_t A_in = allocate_matrix_on_device(A);
     copy_matrix_to_device(A_in, A);
@@ -105,34 +102,45 @@ void compute_on_device(const matrix_t A, matrix_t gpu_naive_sol_x,
     matrix_t X_in = allocate_matrix_on_device(gpu_naive_sol_x);
     matrix_t X_out = allocate_matrix_on_device(gpu_naive_sol_x);
 
-    cudaMalloc((void **)&ssd, num_elements * sizeof(matrix_t));
+    cudaMalloc((int **)&num_elements_in, sizeof(int));
+    cudaMemcpy(num_elements_in, &num_elements, sizeof(int), cudaMemcpyHostToDevice);
+
+    cudaMalloc((double **)&ssd_device, num_elements * sizeof(double));
+    
+    ssd_host = (double *) malloc(num_elements * sizeof(double));
 
     while (! done){
-        cudaMemset(&ssd, 0, sizeof(float));
-
         /* Set up the execution grid on the GPU. */
-        int num_thread_blocks = NUM_THREAD_BLOCKS;
         dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);	/* Set number of threads in the thread block */
-        fprintf(stderr, "Setting up a (%d x 1) execution grid\n", num_thread_blocks);
-        dim3 grid(num_thread_blocks, 1);
+        dim3 grid((num_elements / THREAD_BLOCK_SIZE), 1, 1);
 
         /* Launch kernel with multiple thread blocks. The kernel call is non-blocking. */
-        jacobi_solver_kernel<<< grid, thread_block >>>(A_in, B_in, X_in, X_out);
+        jacobi_iteration_kernel_naive<<< grid, thread_block >>>(A_in.elements, B_in.elements, X_in.elements, X_out.elements, num_elements_in, ssd_device);
 	 
         cudaDeviceSynchronize(); /* Force CPU to wait for GPU to complete */
 
-        cudaMemcpy(ssd_device, ssd_host, sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(ssd_host, ssd_device, num_elements * sizeof(double), cudaMemcpyDeviceToHost);
 
-        if (ssd < THRESHOLD):
+        int i = 0;
+        double ssd = 0;
+        for (i = 0; i < num_elements; i++)
+            ssd += ssd_host[i];
+
+        float *X_temp = X_out.elements;
+        X_out.elements = X_in.elements;
+        X_in.elements = X_temp;
+        
+        num_iter++;
+
+        double mse = sqrt (ssd);  
+        
+        if (mse <= THRESHOLD)
             done = 1;
-        else: {
-            int X_temp = *X_out;
-            *X_out = *X_in;
-            *X_in = X_temp;
-            }
     }
 
-    cudaMemcpy(X_out, gpu_opt_sol_x, sizeof(matrix_t), cudaMemcpyDeviceToHost)
+    copy_matrix_from_device(gpu_naive_sol_x, X_in);
+
+    printf("Done in %d iterations\n", num_iter);
 
     return;
 }
