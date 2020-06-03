@@ -100,7 +100,9 @@ void compute_on_device(const matrix_t A, matrix_t gpu_naive_sol_x,
     copy_matrix_to_device(B_in, B);
 
     matrix_t X_in = allocate_matrix_on_device(gpu_naive_sol_x);
+    copy_matrix_to_device(X_in, B);
     matrix_t X_out = allocate_matrix_on_device(gpu_naive_sol_x);
+    copy_matrix_to_device(X_out, B);
 
     cudaMalloc((int **)&num_elements_in, sizeof(int));
     cudaMemcpy(num_elements_in, &num_elements, sizeof(int), cudaMemcpyHostToDevice);
@@ -133,9 +135,10 @@ void compute_on_device(const matrix_t A, matrix_t gpu_naive_sol_x,
         num_iter++;
 
         double mse = sqrt (ssd);  
-        
-        if (mse <= THRESHOLD)
+       
+        if (mse <= THRESHOLD){
             done = 1;
+        }
     }
 
     copy_matrix_from_device(gpu_naive_sol_x, X_in);
