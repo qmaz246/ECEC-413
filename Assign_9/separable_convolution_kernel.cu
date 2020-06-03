@@ -11,16 +11,15 @@
 __global__ void convolve_rows_kernel_naive(float *result, float *input, float *kernel, int num_cols, int num_rows, int half_width)
 {
     /* Obtain index of thread within the overall execution grid */
-    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+ //   int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     /* Compute the stride length = total number of threads */
-    int stride = blockDim.x * gridDim.x;
+  //  int stride = blockDim.x * gridDim.x;
 
     int i, i1;
     int j, j1, j2;
     int x, y;
 
-//    for (y = 0; y < num_rows; y++) {
-    while (thread_id < (num_cols * num_rows)){
+    for (y = 0; y < num_rows; y++) {
         for (x = 0; x < num_cols; x++) {
             j1 = x - half_width;
             j2 = x + half_width;
@@ -43,7 +42,7 @@ __global__ void convolve_rows_kernel_naive(float *result, float *input, float *k
                     kernel[j] * input[y * num_cols + x + i];
         }
 
-	thread_id += stride;
+//	thread_id += stride;
     }
 
     return;
