@@ -21,16 +21,69 @@ void print_matrix(float *, int, int);
 #define COEFF 10
 
 /* Uncomment line below to spit out debug information */
-// #define DEBUG
+#define DEBUG
 
 /* Include device code */
 #include "separable_convolution_kernel.cu"
 
-/* FIXME: Edit this function to compute the convolution on the device.*/
+#define THREAD_BLOCK_SIZE 128
+#define NUM_THREAD_BLOCKS 240
+
+
+/* Function to compute the convolution on the GPU */
 void compute_on_device(float *gpu_result, float *matrix_c,\
                    float *kernel, int num_cols,\
                    int num_rows, int half_width)
 {
+    float *input_device = NULL;
+    float *output_device = NULL;
+    float *output2_device = NULL;
+    float *kernel_device = NULL;
+
+    int num_elements = num_rows * num_cols;
+    int width = 2 * half_width + 1;
+
+    cudaMalloc((void **)&input_device, num_elements * sizeof(float));
+    cudaMemcpy(input_device, matrix_c, num_elements * sizeof(float), cudaMemcpyHostToDevice);
+ 
+    cudaMalloc((void **)&kernel_device, width * sizeof(float));
+    cudaMemcpy(kernel_device, kernel, width * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMalloc((void **)&output_device, num_elements * sizeof(float));
+    cudaMalloc((void **)&output2_device, num_elements * sizeof(float));
+
+
+    int num_thread_blocks = NUM_THREAD_BLOCKS;
+    dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);
+    fprintf(stderr, "Setting up a (%d x 1) execution grid\n", num_thread_blocks);
+    dim3 grid(num_thread_blocks, 1);
+
+    /* Convolve over rows: input_device is the input matrix and 
+     * convolved matrix is stored in output_device
+     * Launch kernel with multiple thread blocks. The kernel call is non-blocking.
+    */	 
+    
+    convolve_rows_kernel_naive<<< grid, thread_block >>>(output_device, input_device, kernel_device, num_cols, num_rows, half_width);
+
+    cudaDeviceSynchronize();
+
+//    check_for_error("KERNEL FAILURE");
+
+    /* Convolve over columns: matrix_b is the input matrix and 
+     * convolved matrix is stored in matrix_a
+     * Launch kernel with multiple thread blocks. The kernel call is non-blocking.
+     */
+   // convolve_columns_kernel_naive<<< grid, thread_block >>>(output2_device, output_device, kernel_device, num_cols, num_rows, half_width);
+//    convolve_columns(matrix_c, matrix_d, kernel, num_cols, num_rows, half_width);
+
+
+    cudaMemcpy(gpu_result, output_device, num_elements * sizeof(float), cudaMemcpyDeviceToHost);
+
+    /* Free memory on GPU */	  
+    cudaFree(input_device); 
+    cudaFree(output_device); 
+    cudaFree(kernel_device);
+
     return;
 }
 
@@ -87,6 +140,12 @@ int main(int argc, char **argv)
     compute_on_device(gpu_result, matrix_c, gaussian_kernel, num_cols,\
                        num_rows, HALF_WIDTH);
        
+#ifdef DEBUG	 
+    printf("\n");
+    print_matrix(gpu_result, num_cols, num_rows);
+#endif
+
+
     printf("\nComparing CPU and GPU results\n");
     float sum_delta = 0, sum_ref = 0;
     for (i = 0; i < num_elements; i++) {

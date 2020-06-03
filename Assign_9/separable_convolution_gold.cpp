@@ -122,11 +122,14 @@ void compute_gold(float *matrix_a, float *kernel,\
     printf("Convolving over rows\n");
     convolve_rows(matrix_b, matrix_a, kernel, num_cols, num_rows, half_width);
 	  
+
     /* Convolve over columns: matrix_b is the input matrix and 
      * convolved matrix is stored in matrix_a
      */
+/*
     printf("Convolving over columns\n");
     convolve_columns(matrix_a, matrix_b, kernel, num_cols, num_rows, half_width);
+*/
 
     return;
 }
