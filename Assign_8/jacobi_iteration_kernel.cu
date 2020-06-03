@@ -24,7 +24,7 @@ __global__ void jacobi_iteration_kernel_naive(float *A, float * B, float *X_in, 
     return;
 }
 
-__global__ void jacobi_iteration_kernel_optimized(matrix_t A, matrix_t B, matrix_t X_in, matrix_t X_out)
+__global__ void jacobi_iteration_kernel_optimized(float *A, float * B, float *X_in, float *X_out, int *num_elements, double *ssd)
 {
     return;
 }

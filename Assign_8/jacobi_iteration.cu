@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 	/* Compute Jacobi solution on device. Solutions are returned 
        in gpu_naive_solution_x and gpu_opt_solution_x. */
     printf("\nPerforming Jacobi iteration on device\n");
-	compute_on_device(A, gpu_naive_solution_x, gpu_opt_solution_x, B, MATRIX_SIZE);
+	compute_on_device_naive(A, gpu_naive_solution_x, B, MATRIX_SIZE);
     display_jacobi_solution(A, gpu_naive_solution_x, B); /* Display statistics */
     display_jacobi_solution(A, gpu_opt_solution_x, B); 
     
@@ -83,8 +83,7 @@ int main(int argc, char **argv)
 
 
 /* FIXME: Complete this function to perform Jacobi calculation on device */
-void compute_on_device(const matrix_t A, matrix_t gpu_naive_sol_x, 
-                       matrix_t gpu_opt_sol_x, const matrix_t B, int num_elements)
+void compute_on_device_naive(const matrix_t A, matrix_t gpu_naive_sol_x, const matrix_t B, int num_elements)
 {
     int *num_elements_in = NULL;
     double *ssd_device = NULL;
@@ -147,6 +146,76 @@ void compute_on_device(const matrix_t A, matrix_t gpu_naive_sol_x,
 
     return;
 }
+
+
+/* FIXME: Complete this function to perform Jacobi calculation on device */
+void compute_on_device_opt(const matrix_t A, matrix_t gpu_opt_sol_x, const matrix_t B, int num_elements)
+{
+    int *num_elements_in = NULL;
+    double *ssd_device = NULL;
+    double *ssd_host = NULL;
+
+    int done = 0; 
+    int num_iter = 0;
+
+    matrix_t A_in = allocate_matrix_on_device(A);
+    copy_matrix_to_device(A_in, A);
+	
+    matrix_t B_in = allocate_matrix_on_device(B);
+    copy_matrix_to_device(B_in, B);
+
+    matrix_t X_in = allocate_matrix_on_device(gpu_opt_sol_x);
+    copy_matrix_to_device(X_in, B);
+    matrix_t X_out = allocate_matrix_on_device(gpu_opt_sol_x);
+    copy_matrix_to_device(X_out, B);
+
+    cudaMalloc((int **)&num_elements_in, sizeof(int));
+    cudaMemcpy(num_elements_in, &num_elements, sizeof(int), cudaMemcpyHostToDevice);
+
+    cudaMalloc((double **)&ssd_device, num_elements * sizeof(double));
+    
+    ssd_host = (double *) malloc(num_elements * sizeof(double));
+
+    while (! done){
+        /* Set up the execution grid on the GPU. */
+        dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);	/* Set number of threads in the thread block */
+        dim3 grid((num_elements / THREAD_BLOCK_SIZE), 1, 1);
+
+        /* Launch kernel with multiple thread blocks. The kernel call is non-blocking. */
+        jacobi_iteration_kernel_optimized<<< grid, thread_block >>>(A_in.elements, B_in.elements, X_in.elements, X_out.elements, num_elements_in, ssd_device);
+	 
+        cudaDeviceSynchronize(); /* Force CPU to wait for GPU to complete */
+
+        cudaMemcpy(ssd_host, ssd_device, num_elements * sizeof(double), cudaMemcpyDeviceToHost);
+
+        int i = 0;
+        double ssd = 0;
+        for (i = 0; i < num_elements; i++)
+            ssd += ssd_host[i];
+
+        float *X_temp = X_out.elements;
+        X_out.elements = X_in.elements;
+        X_in.elements = X_temp;
+        
+        num_iter++;
+
+        double mse = sqrt (ssd);  
+       
+        if (mse <= THRESHOLD){
+            done = 1;
+        }
+    }
+
+    copy_matrix_from_device(gpu_opt_sol_x, X_in);
+
+    printf("Done in %d iterations\n", num_iter);
+
+    return;
+}
+
+
+
+
 
 /* Allocate matrix on the device of same size as M */
 matrix_t allocate_matrix_on_device(const matrix_t M)
