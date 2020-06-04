@@ -60,18 +60,35 @@ int main(int argc, char **argv)
 	print_matrix(reference_x);
 #endif
 
+    struct timeval start, stop;
+
     /* Compute Jacobi solution on CPU */
-	printf("\nPerforming Jacobi iteration on the CPU\n");
+    printf("\nPerforming Jacobi iteration on the CPU\n");
+    gettimeofday(&start, NULL);
     compute_gold(A, reference_x, B);
+    gettimeofday(&stop, NULL);
     display_jacobi_solution(A, reference_x, B); /* Display statistics */
-	
+    printf("Execution time = %fs\n", (float)(stop.tv_sec - start.tv_sec +\
+                (stop.tv_usec - start.tv_usec)/(float)1000000));
+
 	/* Compute Jacobi solution on device. Solutions are returned 
        in gpu_naive_solution_x and gpu_opt_solution_x. */
-    printf("\nPerforming Jacobi iteration on device\n");
-	compute_on_device_naive(A, gpu_naive_solution_x, B, MATRIX_SIZE);
+    printf("\nPerforming naive Jacobi iteration on device\n");
+    gettimeofday(&start, NULL);
+    compute_on_device_naive(A, gpu_naive_solution_x, B, MATRIX_SIZE);
+    gettimeofday(&stop, NULL);
     display_jacobi_solution(A, gpu_naive_solution_x, B); /* Display statistics */
+    printf("Execution time = %fs\n", (float)(stop.tv_sec - start.tv_sec +\
+                (stop.tv_usec - start.tv_usec)/(float)1000000));
+
+    printf("\nPerforming Optimized Jacobi iteration on device\n");
+    gettimeofday(&start, NULL);
+    compute_on_device_opt(A, gpu_opt_solution_x, B, MATRIX_SIZE);
+    gettimeofday(&stop, NULL);
     display_jacobi_solution(A, gpu_opt_solution_x, B); 
-    
+    printf("Execution time = %fs\n", (float)(stop.tv_sec - start.tv_sec +\
+                (stop.tv_usec - start.tv_usec)/(float)1000000));    
+
     free(A.elements); 
 	free(B.elements); 
 	free(reference_x.elements); 
@@ -112,8 +129,8 @@ void compute_on_device_naive(const matrix_t A, matrix_t gpu_naive_sol_x, const m
 
     while (! done){
         /* Set up the execution grid on the GPU. */
-        dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);	/* Set number of threads in the thread block */
-        dim3 grid((num_elements / THREAD_BLOCK_SIZE), 1, 1);
+        dim3 thread_block(1, THREAD_BLOCK_SIZE, 1);	/* Set number of threads in the thread block */
+        dim3 grid(1, (num_elements / THREAD_BLOCK_SIZE), 1);
 
         /* Launch kernel with multiple thread blocks. The kernel call is non-blocking. */
         jacobi_iteration_kernel_naive<<< grid, thread_block >>>(A_in.elements, B_in.elements, X_in.elements, X_out.elements, num_elements_in, ssd_device);
@@ -158,8 +175,10 @@ void compute_on_device_opt(const matrix_t A, matrix_t gpu_opt_sol_x, const matri
     int done = 0; 
     int num_iter = 0;
 
-    matrix_t A_in = allocate_matrix_on_device(A);
-    copy_matrix_to_device(A_in, A);
+    const matrix_t A_in_row = convert_to_row_major(A);
+
+    matrix_t A_in = allocate_matrix_on_device(A_in_row);
+    copy_matrix_to_device(A_in, A_in_row);
 	
     matrix_t B_in = allocate_matrix_on_device(B);
     copy_matrix_to_device(B_in, B);
@@ -178,8 +197,8 @@ void compute_on_device_opt(const matrix_t A, matrix_t gpu_opt_sol_x, const matri
 
     while (! done){
         /* Set up the execution grid on the GPU. */
-        dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);	/* Set number of threads in the thread block */
-        dim3 grid((num_elements / THREAD_BLOCK_SIZE), 1, 1);
+        dim3 thread_block(1, THREAD_BLOCK_SIZE, 1);	/* Set number of threads in the thread block */
+        dim3 grid(1, (num_elements / THREAD_BLOCK_SIZE), 1);
 
         /* Launch kernel with multiple thread blocks. The kernel call is non-blocking. */
         jacobi_iteration_kernel_optimized<<< grid, thread_block >>>(A_in.elements, B_in.elements, X_in.elements, X_out.elements, num_elements_in, ssd_device);
@@ -212,10 +231,6 @@ void compute_on_device_opt(const matrix_t A, matrix_t gpu_opt_sol_x, const matri
 
     return;
 }
-
-
-
-
 
 /* Allocate matrix on the device of same size as M */
 matrix_t allocate_matrix_on_device(const matrix_t M)
@@ -325,6 +340,26 @@ matrix_t create_diagonally_dominant_matrix(unsigned int num_rows, unsigned int n
 		
         M.elements[i * M.num_rows + i] = 0.5 + row_sum;
 	}
+
+    return M;
+}
+
+matrix_t convert_to_row_major(matrix_t A)
+{
+    matrix_t M;
+    M.num_columns = A.num_columns;
+    M.num_rows = A.num_rows; 
+    unsigned int size = M.num_rows * M.num_columns;
+    M.elements = (float *)malloc(size * sizeof(float));
+    
+    int num_elements = A.num_rows;
+    int i = 0;
+    int k = 0;
+    for(i = 0; i < M.num_rows; i++){
+        for(k = 0; k < M.num_columns; k++){
+            M.elements[i + (k * num_elements)] = A.elements[(i * num_elements) + k];
+        }
+    }
 
     return M;
 }

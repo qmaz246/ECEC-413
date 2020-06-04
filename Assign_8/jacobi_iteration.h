@@ -7,7 +7,7 @@
 
 #define THREAD_BLOCK_SIZE 128            /* Size of a thread block */
 
-#define MATRIX_SIZE 1024
+#define MATRIX_SIZE 512
 #define NUM_COLUMNS MATRIX_SIZE         /* Number of columns in matrix A */
 #define NUM_ROWS MATRIX_SIZE            /* Number of rows in matrix A */
 
@@ -33,6 +33,7 @@ int perform_simple_check(const matrix_t);
 void print_matrix(const matrix_t);
 float get_random_number(int, int);
 void check_CUDA_error(const char *);
+matrix_t convert_to_row_major(matrix_t A);
 
 #endif /* _JACOBI_ITERATION_H_ */
 
