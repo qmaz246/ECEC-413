@@ -15,7 +15,6 @@ void convolve_rows(float *, float *, float *, int, int, int);
 void convolve_columns(float *, float *, float *, int, int, int);
 extern "C" float *create_kernel(float, int);
 
-
 /* Create convolution kernel with specified half width */
 float *create_kernel(float coeff, int half_width)
 {
@@ -122,14 +121,22 @@ void compute_gold(float *matrix_a, float *kernel,\
     printf("Convolving over rows\n");
     convolve_rows(matrix_b, matrix_a, kernel, num_cols, num_rows, half_width);
 	  
-
+/*    int i,  j;
+    float element;
+    for (i = 0; i < num_rows; i++) {
+        for (j = 0; j < num_cols; j++){
+            element = matrix_b[i * num_cols + j];
+            printf("%0.2f ", element);
+        }
+        printf("\n");
+    }
+*/
     /* Convolve over columns: matrix_b is the input matrix and 
      * convolved matrix is stored in matrix_a
      */
-/*
+
     printf("Convolving over columns\n");
     convolve_columns(matrix_a, matrix_b, kernel, num_cols, num_rows, half_width);
-*/
 
     return;
 }
