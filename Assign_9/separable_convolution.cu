@@ -249,7 +249,7 @@ void compute_on_device_opt(float *gpu_result, float *matrix_c,\
     int num_thread_blocks = ceil((float)num_elements/(float)(THREAD_BLOCK_SIZE));
     dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);
     fprintf(stderr, "Setting up a (%d x 1) execution grid\n", num_thread_blocks);
-    dim3 grid(num_thread_blocks, 1);
+    dim3 grid(num_thread_blocks, 1, 1);
 
     /* We copy the mask to GPU constant memory to improve performance */
     cudaMemcpyToSymbol(kernel_c, kernel_device, width * sizeof(float));
@@ -327,4 +327,5 @@ void print_matrix(float *matrix, int num_cols, int num_rows)
 
     return;
 }
+
 

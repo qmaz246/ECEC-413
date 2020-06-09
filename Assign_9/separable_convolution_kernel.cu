@@ -115,9 +115,9 @@ __global__ void convolve_rows_kernel_optimized(float *result, float *input, int 
         j2 = j2 - x + half_width;
 
         /* Convolve along row */
-        result[thread_id * num_cols + x] = 0.0f;
+        result[thread_id + num_cols * x] = 0.0f;
         for(i = i1, j = j1; j <= j2; j++, i++)
-                result[thread_id * num_cols + x] += kernel_c[j] * input[thread_id * num_cols + x + i];
+                result[thread_id + (num_cols * x)] += kernel_c[j] * input[thread_id * num_cols + x + i];
     }
 
     return;
@@ -156,7 +156,7 @@ __global__ void convolve_columns_kernel_optimized(float *result, float *input, i
         /* Convolve along column */            
         result[thread_id * num_cols + x] = 0.0f;
         for (i = i1, j = j1; j <= j2; j++, i++)
-            result[thread_id * num_cols + x] += kernel_c[j] * input[thread_id * num_cols + x + (i * num_cols)];
+            result[thread_id * num_cols + x] += kernel_c[j] * input[thread_id + (num_cols * x) + i];
     }
 
 
