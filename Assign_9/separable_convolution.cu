@@ -14,7 +14,8 @@
 
 extern "C" void compute_gold(float *, float *, int, int, int);
 extern "C" float *create_kernel(float, int);
-void compute_on_device(float *, float *, float *, int, int, int, int);
+void compute_on_device_nai(float *, float *, float *, int, int, int);
+void compute_on_device_opt(float *, float *, float *, int, int, int);
 void check_for_error(char *);
 void print_kernel(float *, int);
 void print_matrix(float *, int, int);
@@ -91,9 +92,14 @@ int main(int argc, char **argv)
     /* Convolve matrix along rows and columns using GPU_Naive
      */
     printf("\nConvolving matrix on the GPU Naive\n");
-    compute_on_device(gpu_result_naive, matrix_c, gaussian_kernel, num_cols,\
-                       num_rows, HALF_WIDTH, 1);
-       
+    gettimeofday(&start, NULL);
+    compute_on_device_nai(gpu_result_naive, matrix_c, gaussian_kernel, num_cols,\
+                       num_rows, HALF_WIDTH);
+    gettimeofday(&stop, NULL);
+    fprintf(stderr, "Naive run time = %0.4f s\n", (float)(stop.tv_sec - start.tv_sec\
+                + (stop.tv_usec - start.tv_usec) / (float)1000000));
+
+      
 #ifdef DEBUG	 
     printf("\n");
     print_matrix(gpu_result_naive, num_cols, num_rows);
@@ -117,9 +123,14 @@ int main(int argc, char **argv)
     /* Convolve matrix along rows and columns using GPU_Naive
      */
     printf("\nConvolving matrix on the GPU Optimized\n");
-    compute_on_device(gpu_result_opt, matrix_c, gaussian_kernel, num_cols,\
-                       num_rows, HALF_WIDTH, 2);
-       
+    gettimeofday(&start, NULL);
+    compute_on_device_opt(gpu_result_opt, matrix_c, gaussian_kernel, num_cols,\
+                       num_rows, HALF_WIDTH);
+    gettimeofday(&stop, NULL);
+    fprintf(stderr, "Optimized run time = %0.4f s\n", (float)(stop.tv_sec - start.tv_sec\
+                + (stop.tv_usec - start.tv_usec) / (float)1000000));
+
+      
 #ifdef DEBUG	 
     printf("\n");
     print_matrix(gpu_result_opt, num_cols, num_rows);
@@ -150,9 +161,9 @@ int main(int argc, char **argv)
 }
 
 /* Function to compute the convolution on the GPU */
-void compute_on_device(float *gpu_result, float *matrix_c,\
+void compute_on_device_nai(float *gpu_result, float *matrix_c,\
                    float *kernel, int num_cols,\
-                   int num_rows, int half_width, int option)
+                   int num_rows, int half_width)
 {
     float *input_device = NULL;
     float *output_device = NULL;
@@ -161,8 +172,6 @@ void compute_on_device(float *gpu_result, float *matrix_c,\
 
     int num_elements = num_rows * num_cols;
     int width = 2 * half_width + 1;
-
-    struct timeval start, stop;
 
     cudaMalloc((void **)&input_device, num_elements * sizeof(float));
     cudaMemcpy(input_device, matrix_c, num_elements * sizeof(float), cudaMemcpyHostToDevice);
@@ -182,67 +191,28 @@ void compute_on_device(float *gpu_result, float *matrix_c,\
      * convolved matrix is stored in output_device
      * Launch kernel with multiple thread blocks. The kernel call is non-blocking.
     */	 
-    if (option == 1){
-    	fprintf(stderr, "2D Convolution with Naive\n");
-    	fprintf(stderr, "Convolving over Rows\n"); 
-	gettimeofday(&start, NULL);
-    	convolve_rows_kernel_naive<<<grid, thread_block>>>(output_device, input_device, kernel_device, num_cols, num_rows, half_width);
-    	cudaDeviceSynchronize();
+    fprintf(stderr, "2D Convolution with Naive\n");
+    fprintf(stderr, "Convolving over Rows\n"); 
+    convolve_rows_kernel_naive<<<grid, thread_block>>>(output_device, input_device, kernel_device, num_cols, num_rows, half_width);
+    cudaDeviceSynchronize();
 	
-	check_for_error("KERNEL FAILURE");
+    check_for_error("KERNEL FAILURE");
 
     /* Convolve over columns: matrix_b is the input matrix and 
      * convolved matrix is stored in matrix_a
      * Launch kernel with multiple thread blocks. The kernel call is non-blocking.
      */
-    	fprintf(stderr, "Convolving over Columns\n");
-    	convolve_columns_kernel_naive<<<grid, thread_block>>>(output2_device, output_device, kernel_device, num_cols, num_rows, half_width);
-    	cudaDeviceSynchronize();
+    fprintf(stderr, "Convolving over Columns\n");
+    convolve_columns_kernel_naive<<<grid, thread_block>>>(output2_device, output_device, kernel_device, num_cols, num_rows, half_width);
+    cudaDeviceSynchronize();
 
-    	check_for_error("KERNEL FAILURE");
+    check_for_error("KERNEL FAILURE");
 
-    	cudaMemcpy(gpu_result, output2_device, num_elements * sizeof(float), cudaMemcpyDeviceToHost);
-	gettimeofday(&stop, NULL);
-    	fprintf(stderr, "GPU Naive run time = %0.4f s\n", (float)(stop.tv_sec - start.tv_sec\
-                + (stop.tv_usec - start.tv_usec) / (float)1000000));
-
+    cudaMemcpy(gpu_result, output2_device, num_elements * sizeof(float), cudaMemcpyDeviceToHost);
 
 #ifdef DEBUG
     print_matrix(gpu_result, num_cols, num_rows); 
 #endif
-    } else if (option == 2){
-	/* We copy the mask to GPU constant memory to improve performance */
-        cudaMemcpyToSymbol(kernel_c, kernel_device, width * sizeof(float));
-
-	fprintf(stderr, "2D Convolution with Optimized\n");
-    	fprintf(stderr, "Convolving over Rows\n"); 
-	gettimeofday(&start, NULL);
-    	convolve_rows_kernel_optimized<<<grid, thread_block>>>(output_device, input_device, num_cols, num_rows, half_width);
-    	cudaDeviceSynchronize();
-	
-	check_for_error("KERNEL FAILURE");
-
-    /* Convolve over columns: matrix_b is the input matrix and 
-     * convolved matrix is stored in matrix_a
-     * Launch kernel with multiple thread blocks. The kernel call is non-blocking.
-     */
-    	fprintf(stderr, "Convolving over Columns\n");
-    	convolve_columns_kernel_optimized<<<grid, thread_block>>>(output2_device, output_device, num_cols, num_rows, half_width);
-    	cudaDeviceSynchronize();
-
-    	check_for_error("KERNEL FAILURE");
-
-    	cudaMemcpy(gpu_result, output2_device, num_elements * sizeof(float), cudaMemcpyDeviceToHost);
-	gettimeofday(&stop, NULL);
-    	fprintf(stderr, "GPU Optimized run time = %0.4f s\n", (float)(stop.tv_sec - start.tv_sec\
-                + (stop.tv_usec - start.tv_usec) / (float)1000000));
-
-
-#ifdef DEBUG
-    print_matrix(gpu_result, num_cols, num_rows); 
-#endif
-    }
-
 
     /* Free memory on GPU */	  
     cudaFree(input_device); 
@@ -252,6 +222,70 @@ void compute_on_device(float *gpu_result, float *matrix_c,\
 
     return;
 }
+
+
+/* Function to compute the convolution on the GPU */
+void compute_on_device_opt(float *gpu_result, float *matrix_c,\
+                   float *kernel, int num_cols,\
+                   int num_rows, int half_width)
+{
+    float *input_device = NULL;
+    float *output_device = NULL;
+    float *output2_device = NULL;
+    float *kernel_device = NULL;
+
+    int num_elements = num_rows * num_cols;
+    int width = 2 * half_width + 1;
+
+    cudaMalloc((void **)&input_device, num_elements * sizeof(float));
+    cudaMemcpy(input_device, matrix_c, num_elements * sizeof(float), cudaMemcpyHostToDevice);
+ 
+    cudaMalloc((void **)&kernel_device, width * sizeof(float));
+    cudaMemcpy(kernel_device, kernel, width * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMalloc((void **)&output_device, num_elements * sizeof(float));
+    cudaMalloc((void **)&output2_device, num_elements * sizeof(float));
+
+    int num_thread_blocks = ceil((float)num_elements/(float)(THREAD_BLOCK_SIZE));
+    dim3 thread_block(THREAD_BLOCK_SIZE, 1, 1);
+    fprintf(stderr, "Setting up a (%d x 1) execution grid\n", num_thread_blocks);
+    dim3 grid(num_thread_blocks, 1);
+
+    /* We copy the mask to GPU constant memory to improve performance */
+    cudaMemcpyToSymbol(kernel_c, kernel_device, width * sizeof(float));
+
+    fprintf(stderr, "2D Convolution with Optimized\n");
+    fprintf(stderr, "Convolving over Rows\n"); 
+    convolve_rows_kernel_optimized<<<grid, thread_block>>>(output_device, input_device, num_cols, num_rows, half_width);
+    cudaDeviceSynchronize();
+	
+    check_for_error("KERNEL FAILURE");
+
+    /* Convolve over columns: matrix_b is the input matrix and 
+     * convolved matrix is stored in matrix_a
+     * Launch kernel with multiple thread blocks. The kernel call is non-blocking.
+     */
+    fprintf(stderr, "Convolving over Columns\n");
+    convolve_columns_kernel_optimized<<<grid, thread_block>>>(output2_device, output_device, num_cols, num_rows, half_width);
+    cudaDeviceSynchronize();
+
+    check_for_error("KERNEL FAILURE");
+
+    cudaMemcpy(gpu_result, output2_device, num_elements * sizeof(float), cudaMemcpyDeviceToHost);
+
+#ifdef DEBUG
+    print_matrix(gpu_result, num_cols, num_rows); 
+#endif
+
+    /* Free memory on GPU */	  
+    cudaFree(input_device); 
+    cudaFree(output_device); 
+    cudaFree(output2_device);
+    cudaFree(kernel_device);
+
+    return;
+}
+
 
 /* Check for errors reported by the CUDA run time */
 void check_for_error(char *msg)
